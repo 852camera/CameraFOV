@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stadium Lens Simulator (HK Edition)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: 'Segoe UI', sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: default; }
+        
+        /* UI Overlay */
+        .ui-layer { position: absolute; z-index: 10; pointer-events: none; }
+        .interactive { pointer-events: auto; }
+
+        /* Range Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none; width: 100%; background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%;
+            background: #3b82f6; cursor: pointer; margin-top: -8px; border: 2px solid white;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; cursor: pointer; background: #4b5563; border-radius: 2px;
+        }
+
+        /* Map Canvas */
+        #map-canvas {
+            background: rgba(0, 20, 0, 0.8);
+            border: 2px solid #333;
+            border-radius: 8px;
+            cursor: crosshair;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+        }
+
+        /* Select Dropdown */
+        select {
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23007CB2%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.7rem top 50%;
+            background-size: 0.65rem auto;
+            appearance: none;
+        }
+        
+        /* Clickable Marks */
+        .focal-mark { cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: background 0.2s; user-select: none; width: 30px; text-align: center; }
+        .focal-mark:hover { background: rgba(255,255,255,0.2); color: #3b82f6; }
+    </style>
+</head>
+<body>
+
+    <!-- 3D Viewport -->
+    <div id="canvas-container"></div>
+
+    <!-- HUD Overlay -->
+    <div class="ui-layer w-full h-full flex flex-col justify-between p-4">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-start">
+            <div class="bg-black/70 backdrop-blur-md p-4 rounded-lg border border-gray-700 max-w-sm pointer-events-auto">
+                <h1 class="text-xl font-bold text-blue-400 mb-1">Stadium Lens Sim</h1>
+                <div class="mb-2">
+                    <label class="text-xs text-gray-400 block mb-1">SELECT VENUE</label>
+                    <select id="venue-select" class="w-full bg-gray-800 border border-gray-600 text-white text-sm rounded p-2 focus:ring-blue-500 focus:border-blue-500 block">
+                        <option value="hk_coliseum">Hong Kong Coliseum (Hung Hom)</option>
+                        <option value="asia_world">AsiaWorld-Expo (Arena)</option>
+                        <option value="kai_tak">Kai Tak Main Stadium</option>
+                    </select>
+                </div>
+                <p class="text-xs text-gray-400">1. Drag Map to move camera.<br>2. <b>Shift+Click Map</b> to place Subject.</p>
+            </div>
+            
+            <!-- Readouts -->
+            <div class="bg-black/70 backdrop-blur-md p-4 rounded-lg border border-gray-700 text-right w-48 pointer-events-auto">
+                <div class="text-xs text-gray-400 uppercase tracking-wider">Target Dist</div>
+                <div class="text-xl font-mono text-white mb-2"><span id="distance-val">0</span> m</div>
+                <div class="text-xs text-gray-400 uppercase tracking-wider">Angle of View</div>
+                <div class="text-xl font-mono text-white"><span id="fov-val">0</span>°</div>
+                <div class="text-[10px] text-gray-500">(Diagonal)</div>
+                <div class="text-xs text-gray-400 uppercase tracking-wider mt-2">Cam Height</div>
+                <div class="text-xl font-mono text-white"><span id="height-val">1.7</span> m</div>
+            </div>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div class="flex flex-col md:flex-row items-end md:items-end justify-between gap-4">
+            
+            <!-- Map (Bottom Left) -->
+            <div class="interactive relative group">
+                <div class="absolute -top-8 left-0 text-sm font-bold text-white bg-black/50 px-2 rounded">Position Map (Shift+Click to set Target)</div>
+                <canvas id="map-canvas" width="220" height="220" title="Drag to move camera. Shift+Click to move target figure."></canvas>
+            </div>
+
+            <!-- Lens Controls (Bottom Center/Right) -->
+            <div class="interactive bg-black/80 backdrop-blur-md p-6 rounded-xl border border-gray-700 w-full md:max-w-xl mb-4 md:mb-0 shadow-2xl">
+                
+                <!-- Sensor Select -->
+                <div class="flex justify-center gap-2 mb-6">
+                    <button onclick="setSensor('ff')" id="btn-ff" class="px-4 py-2 text-sm bg-blue-600 rounded hover:bg-blue-500 transition border border-blue-400 font-bold">Full Frame</button>
+                    <button onclick="setSensor('apsc')" id="btn-apsc" class="px-4 py-2 text-sm bg-gray-700 rounded hover:bg-gray-600 transition border border-gray-600">APS-C (1.5x)</button>
+                    <button onclick="setSensor('mft')" id="btn-mft" class="px-4 py-2 text-sm bg-gray-700 rounded hover:bg-gray-600 transition border border-gray-600">M4/3 (2.0x)</button>
+                </div>
+
+                <!-- Focal Length Slider -->
+                <div class="mb-2 flex justify-between items-end">
+                    <label class="text-sm font-bold text-gray-300">Focal Length</label>
+                    <span class="text-2xl font-bold text-blue-400"><span id="focal-val">14</span>mm</span>
+                </div>
+                <!-- Slider: 0 to 8 corresponds to the 9 stops below -->
+                <input type="range" id="focal-slider" min="0" max="8" step="0.05" value="0" class="w-full mb-2">
+                
+                <!-- Clickable Reference Marks -->
+                <div class="flex justify-between text-[10px] text-gray-500 font-mono w-full px-1">
+                    <span class="focal-mark" onclick="setFocalIndex(0)">14</span>
+                    <span class="focal-mark" onclick="setFocalIndex(1)">24</span>
+                    <span class="focal-mark" onclick="setFocalIndex(2)">35</span>
+                    <span class="focal-mark" onclick="setFocalIndex(3)">50</span>
+                    <span class="focal-mark" onclick="setFocalIndex(4)">85</span>
+                    <span class="focal-mark" onclick="setFocalIndex(5)">135</span>
+                    <span class="focal-mark" onclick="setFocalIndex(6)">200</span>
+                    <span class="focal-mark" onclick="setFocalIndex(7)">400</span>
+                    <span class="focal-mark" onclick="setFocalIndex(8)">600</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Import Three.js -->
+    <script type="module">
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+        // --- Configuration & Data ---
+        
+        const SENSORS = {
+            ff: { w: 36, h: 24, name: "Full Frame" },
+            apsc: { w: 23.6, h: 15.6, name: "APS-C" },
+            mft: { w: 17.3, h: 13, name: "Micro 4/3" }
+        };
+
+        const FOCAL_STOPS = [14, 24, 35, 50, 85, 135, 200, 400, 600];
+
+        function clampRect(x, z, xMax, zMax) {
+            return { x: Math.max(-xMax, Math.min(xMax, x)), z: Math.max(-zMax, Math.min(zMax, z)) };
+        }
+        function clampRadius(x, z, radius) {
+            const dist = Math.sqrt(x*x + z*z);
+            if (dist <= radius) return { x, z };
+            const scale = radius / dist;
+            return { x: x * scale, z: z * scale };
+        }
+        function clampEllipse(x, z, xRad, zRad) {
+            const dx = x / xRad; const dz = z / zRad;
+            const distSq = dx*dx + dz*dz;
+            if (distSq <= 1) return { x, z };
+            const dist = Math.sqrt(distSq);
+            return { x: x/dist, z: z/dist };
+        }
+
+        const VENUES = {
+            hk_coliseum: {
+                name: "HK Coliseum",
+                mapScale: 3.5, 
+                build: buildHKColiseum,
+                drawMap: drawHKColiseumMap,
+                getHeight: getHKColiseumHeight,
+                clamp: (x, z) => clampRadius(x, z, 55)
+            },
+            asia_world: {
+                name: "AsiaWorld-Expo",
+                mapScale: 2.2,
+                build: buildAsiaWorld,
+                drawMap: drawAsiaWorldMap,
+                getHeight: getAsiaWorldHeight,
+                clamp: (x, z) => clampRect(x, z, 38, 55)
+            },
+            kai_tak: {
+                name: "Kai Tak Main Stadium",
+                mapScale: 1.2, 
+                build: buildKaiTak,
+                drawMap: drawKaiTakMap,
+                getHeight: getKaiTakHeight,
+                clamp: (x, z) => clampEllipse(x, z, 95, 125) 
+            }
+        };
+
+        let currentVenue = VENUES.hk_coliseum;
+        let currentSensor = SENSORS.ff;
+        let currentFocalLength = 14; 
+        let cameraHeight = 1.7; 
+        let camX = 0; let camZ = -50;
+        
+        // Target Logic
+        let lookTarget = new THREE.Vector3(0, 1.7, 0); 
+        let targetGroup = null; 
+
+        // --- Three.js Init ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 20, 500);
+
+        const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 2000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(50, 100, 50);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+
+        let stadiumGroup = new THREE.Group();
+        scene.add(stadiumGroup);
+
+        const raycaster = new THREE.Raycaster();
+
+        // --- Height Logic ---
+        function getHKColiseumHeight(x, z) {
+            const dist = Math.sqrt(x*x + z*z);
+            if (dist < 18) return 1.7;
+            return 1.7 + (dist - 18) * 0.6; 
+        }
+        function getAsiaWorldHeight(x, z) {
+            const w = 20; const l = 40; 
+            if (Math.abs(x) < w && z < l && z > -50) return 1.7;
+            let dist = 0;
+            if (Math.abs(x) >= w) dist = Math.abs(x) - w;
+            if (z >= l) dist = Math.max(dist, z - l);
+            return 1.7 + (dist * 0.6);
+        }
+        function getKaiTakHeight(x, z) {
+            const xRad = 45; const zRad = 65;
+            const val = (x*x)/(xRad*xRad) + (z*z)/(zRad*zRad);
+            if (val < 1) return 1.7; 
+            const distFactor = Math.sqrt(val) - 1; 
+            if (z > 40 && Math.abs(x) < 40) return 1.7 + distFactor * 60; 
+            return 1.7 + distFactor * 40; 
+        }
+
+        // --- Geometry Builders ---
+        function clearStadium() {
+            scene.remove(stadiumGroup);
+            stadiumGroup = new THREE.Group();
+            scene.add(stadiumGroup);
+            
+            // Re-add target if exists
+            if (targetGroup) {
+                stadiumGroup.add(targetGroup);
+            } else {
+                // Init with no target
+                lookTarget.set(0, 1.7, 0);
+            }
+
+            if (currentVenue.name === "HK Coliseum" || currentVenue.name === "AsiaWorld-Expo") {
+                scene.background = new THREE.Color(0x050505); 
+                scene.fog = new THREE.Fog(0x050505, 30, 400);
+                ambientLight.intensity = 0.9; 
+                dirLight.intensity = 1.0;     
+            } else {
+                scene.background = new THREE.Color(0x87CEEB); 
+                scene.fog = new THREE.Fog(0x87CEEB, 20, 1000);
+                ambientLight.intensity = 0.6;
+                dirLight.intensity = 0.8;
+            }
+        }
+
+        function createTargetFigure(x, z) {
+            if (targetGroup) {
+                stadiumGroup.remove(targetGroup);
+            }
+            targetGroup = new THREE.Group();
+            
+            // Bright Yellow Jersey
+            const mat = new THREE.MeshStandardMaterial({color: 0xffff00, emissive: 0x222200});
+            const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1), mat);
+            body.position.y = 0.9; body.castShadow = true;
+            
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshStandardMaterial({color:0xffccaa}));
+            head.position.y = 1.7;
+            
+            targetGroup.add(body, head);
+            
+            // Raycast to find exact ground height at (x, z)
+            const rayOrigin = new THREE.Vector3(x, 100, z);
+            const rayDir = new THREE.Vector3(0, -1, 0);
+            raycaster.set(rayOrigin, rayDir);
+            
+            // Intersect with stadium (excluding the target group itself if it were added)
+            const intersects = raycaster.intersectObjects(stadiumGroup.children, true);
+            
+            let groundY = 0;
+            // Find first intersection that IS NOT flagged as ignoreRaycast
+            const validHit = intersects.find(hit => !hit.object.userData.ignoreRaycast);
+            
+            if (validHit) {
+                groundY = validHit.point.y;
+            } else {
+                // Fallback using analytical height
+                groundY = Math.max(0, currentVenue.getHeight(x, z) - 1.7);
+            }
+
+            // Place on ground
+            targetGroup.position.set(x, groundY, z);
+            
+            // Arrow indicator
+            const arrowGeo = new THREE.ConeGeometry(0.2, 0.5, 8);
+            const arrowMat = new THREE.MeshBasicMaterial({color: 0xffff00});
+            const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+            arrow.rotation.z = Math.PI;
+            arrow.position.y = 2.5;
+            targetGroup.add(arrow);
+
+            stadiumGroup.add(targetGroup);
+            lookTarget.set(x, groundY + 1.7, z); 
+        }
+
+        function buildSteppedSection(width, numRows, rowDepth, rowHeight, startDist, startHeight, color) {
+            const sectionGroup = new THREE.Group();
+            const seatMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8, side: THREE.DoubleSide });
+            for (let i = 0; i < numRows; i++) {
+                const rowGeo = new THREE.BoxGeometry(width, rowHeight, rowDepth);
+                const rowMesh = new THREE.Mesh(rowGeo, seatMat);
+                const yPos = startHeight + (i * rowHeight) + (rowHeight / 2);
+                const zPos = startDist + (i * rowDepth) + (rowDepth / 2);
+                rowMesh.position.set(0, yPos, zPos);
+                rowMesh.receiveShadow = true;
+                sectionGroup.add(rowMesh);
+            }
+            return sectionGroup;
+        }
+
+        function buildHKColiseum() {
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(45, 45), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+            floor.rotation.x = -Math.PI/2; stadiumGroup.add(floor);
+            const stage = new THREE.Mesh(new THREE.BoxGeometry(14, 1.5, 14), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+            stage.position.y = 0.75; stadiumGroup.add(stage);
+            
+            const numRows = 35; const rowDepth = 0.9; const rowHeight = 0.55; const startDist = 18; const bankW = 30;
+            const configs = [{c:0xdd2222, r:0}, {c:0x2244dd, r:Math.PI/2}, {c:0xdddd22, r:Math.PI}, {c:0x22aa22, r:-Math.PI/2}];
+            configs.forEach(cf => {
+                const s = buildSteppedSection(bankW, numRows, rowDepth, rowHeight, startDist, 0, cf.c);
+                s.rotation.y = cf.r; stadiumGroup.add(s);
+            });
+            for(let i=0; i<4; i++){
+                const s = buildSteppedSection(18, numRows, rowDepth, rowHeight, startDist*1.35, 0, 0x555555);
+                s.rotation.y = (Math.PI/2)*i + Math.PI/4; stadiumGroup.add(s);
+            }
+            // Ceiling Truss - Ignore for Raycast
+            const truss = new THREE.Mesh(new THREE.BoxGeometry(70,1,70), new THREE.MeshBasicMaterial({color:0x111111, wireframe:true}));
+            truss.position.y = 25; 
+            truss.userData = { ignoreRaycast: true }; // TAGGED
+            stadiumGroup.add(truss);
+        }
+
+        function buildAsiaWorld() {
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(75, 110), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+            floor.rotation.x = -Math.PI/2; stadiumGroup.add(floor);
+            const stage = new THREE.Mesh(new THREE.BoxGeometry(24, 1.5, 16), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+            stage.position.set(0, 0.75, -45); stadiumGroup.add(stage);
+
+            const seatColor = 0x6a0dad; const blockMat = new THREE.MeshStandardMaterial({ color: seatColor });
+            function createFloorBlock(x, z) {
+                const b = new THREE.Mesh(new THREE.BoxGeometry(16, 0.2, 20), blockMat);
+                b.position.set(x, 0.1, z); stadiumGroup.add(b);
+            }
+            [[-10,-20],[10,-20],[-10,5],[10,5],[-10,30],[10,30]].forEach(p=>createFloorBlock(p[0],p[1]));
+
+            const rs = buildSteppedSection(90, 25, 0.8, 0.4, 22, 0, seatColor); rs.rotation.y=-Math.PI/2; stadiumGroup.add(rs);
+            const ls = buildSteppedSection(90, 25, 0.8, 0.4, 22, 0, seatColor); ls.rotation.y=Math.PI/2; stadiumGroup.add(ls);
+            const rear = buildSteppedSection(80, 25, 0.8, 0.4, 42, 0, seatColor); rear.rotation.y=Math.PI; stadiumGroup.add(rear);
+            
+            // Ceiling Truss - Ignore
+            const truss = new THREE.Mesh(new THREE.PlaneGeometry(75, 110, 10, 15), new THREE.MeshBasicMaterial({ color: 0x222222, wireframe: true }));
+            truss.rotation.x = Math.PI/2; truss.position.y = 18; 
+            truss.userData = { ignoreRaycast: true }; // TAGGED
+            stadiumGroup.add(truss);
+        }
+
+        function buildKaiTak() {
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 130), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+            floor.rotation.x = -Math.PI/2; stadiumGroup.add(floor);
+
+            const baseGeo = new THREE.PlaneGeometry(130, 160);
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.rotation.x = -Math.PI/2; base.position.y = -0.1;
+            stadiumGroup.add(base);
+
+            const cPurple = 0x6a0dad; const cRed = 0xdd2222; 
+            const xDist = 45; const zDist = 65;
+
+            const sStand = buildSteppedSection(90, 45, 0.8, 0.55, zDist, 0, cPurple);
+            sStand.rotation.y = Math.PI; stadiumGroup.add(sStand);
+
+            const wLower = buildSteppedSection(130, 18, 0.8, 0.4, xDist, 0, cPurple);
+            wLower.rotation.y = -Math.PI/2; stadiumGroup.add(wLower);
+            const wUpper = buildSteppedSection(130, 22, 0.8, 0.6, xDist + (18*0.8)+3, (18*0.4)+3, cRed);
+            wUpper.rotation.y = -Math.PI/2; stadiumGroup.add(wUpper);
+
+            const eLower = buildSteppedSection(130, 18, 0.8, 0.4, xDist, 0, cPurple);
+            eLower.rotation.y = Math.PI/2; stadiumGroup.add(eLower);
+            const eUpper = buildSteppedSection(130, 22, 0.8, 0.6, xDist + (18*0.8)+3, (18*0.4)+3, cRed);
+            eUpper.rotation.y = Math.PI/2; stadiumGroup.add(eUpper);
+
+            const stageMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const stage = new THREE.Mesh(new THREE.BoxGeometry(40, 2, 20), stageMat);
+            stage.position.set(0, 1, -zDist + 10);
+            stadiumGroup.add(stage);
+            const catwalk = new THREE.Mesh(new THREE.BoxGeometry(8, 2, 30), stageMat);
+            catwalk.position.set(0, 1, -zDist + 35);
+            stadiumGroup.add(catwalk);
+
+            // Roof - Ignore for Raycast
+            const trussGeo = new THREE.BoxGeometry(180, 4, 6);
+            const trussMat = new THREE.MeshStandardMaterial({color: 0xffffff});
+            const t1 = new THREE.Mesh(trussGeo, trussMat); t1.position.set(0, 65, -20); 
+            t1.userData = { ignoreRaycast: true }; // TAGGED
+            stadiumGroup.add(t1);
+            const t2 = new THREE.Mesh(trussGeo, trussMat); t2.position.set(0, 65, 20); 
+            t2.userData = { ignoreRaycast: true }; // TAGGED
+            stadiumGroup.add(t2);
+        }
+
+        const mapCanvas = document.getElementById('map-canvas');
+        const ctx = mapCanvas.getContext('2d');
+        
+        function drawHKColiseumMap(ctx, cx, cy, s) {
+            ctx.fillStyle = "#111"; ctx.fillRect(cx - 7*s, cy - 7*s, 14*s, 14*s);
+            ctx.fillStyle = "white"; ctx.font="9px sans-serif"; ctx.textAlign="center"; ctx.fillText("STAGE", cx, cy + 3);
+            function drawBank(color, angle, dist) {
+                ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle);
+                ctx.beginPath(); ctx.moveTo(-15*s, -dist*s); ctx.lineTo(15*s, -dist*s);
+                ctx.lineTo(25*s, -(dist+20)*s); ctx.lineTo(-25*s, -(dist+20)*s);
+                ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.restore();
+            }
+            const d = 14;
+            drawBank("#dd2222", 0, d); drawBank("#dddd22", Math.PI, d);
+            drawBank("#2244dd", Math.PI/2, d); drawBank("#22aa22", -Math.PI/2, d);
+            function drawCorner(angle) {
+                ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle);
+                ctx.beginPath(); ctx.moveTo(-7*s, -20*s); ctx.lineTo(7*s, -20*s);
+                ctx.lineTo(10*s, -35*s); ctx.lineTo(-10*s, -35*s);
+                ctx.closePath(); ctx.fillStyle = "#666"; ctx.fill(); ctx.restore();
+            }
+            [Math.PI/4, 3*Math.PI/4, -Math.PI/4, -3*Math.PI/4].forEach(a => drawCorner(a));
+        }
+
+        function drawAsiaWorldMap(ctx, cx, cy, s) {
+            const seatColor = "#6a0dad"; const blockColor = "#552a6a";
+            ctx.fillStyle = "#111"; ctx.fillRect(cx - 12*s, cy - 45*s, 24*s, 8*s);
+            ctx.fillStyle = "white"; ctx.font="9px sans-serif"; ctx.textAlign="center"; ctx.fillText("STAGE", cx, cy - 40*s);
+            const bw = 16*s; const bl = 20*s; ctx.fillStyle = blockColor;
+            [[-10,-20],[10,-20],[-10,5],[10,5],[-10,30],[10,30]].forEach(p => {
+                let x = (p[0]<0)?cx-bw-2*s : cx+2*s; ctx.fillRect(x, cy+p[1]*s, bw, bl);
+            });
+            ctx.fillStyle = seatColor;
+            ctx.fillRect(cx - 38*s, cy - 40*s, 14*s, 90*s);
+            ctx.fillRect(cx + 24*s, cy - 40*s, 14*s, 90*s);
+            ctx.fillRect(cx - 38*s, cy + 45*s, 76*s, 14*s);
+        }
+
+        function drawKaiTakMap(ctx, cx, cy, s) {
+            ctx.fillStyle = "#333"; ctx.fillRect(cx - 35*s, cy - 50*s, 70*s, 100*s);
+            ctx.fillStyle = "#8a2be2"; ctx.beginPath(); ctx.moveTo(cx - 35*s, cy + 50*s);
+            ctx.lineTo(cx + 35*s, cy + 50*s); ctx.lineTo(cx + 50*s, cy + 90*s); ctx.lineTo(cx - 50*s, cy + 90*s); ctx.fill();
+            ctx.fillStyle = "white"; ctx.font="10px sans-serif"; ctx.textAlign="center"; ctx.fillText("SOUTH", cx, cy + 70*s);
+            ctx.fillStyle = "#000";
+            ctx.fillRect(cx - 20*s, cy - 65*s, 40*s, 10*s);
+            ctx.fillRect(cx - 4*s, cy - 55*s, 8*s, 20*s);
+            ctx.fillStyle = "white"; ctx.fillText("STAGE", cx, cy - 60*s);
+            ctx.fillStyle = "#2244dd"; ctx.beginPath(); ctx.moveTo(cx - 35*s, cy - 50*s); ctx.lineTo(cx - 35*s, cy + 50*s); ctx.lineTo(cx - 70*s, cy + 60*s); ctx.lineTo(cx - 70*s, cy - 60*s); ctx.fill();
+            ctx.save(); ctx.translate(cx-55*s, cy); ctx.rotate(-Math.PI/2); ctx.fillStyle="white"; ctx.fillText("WEST", 0,0); ctx.restore();
+            ctx.fillStyle = "#dd4422"; ctx.beginPath(); ctx.moveTo(cx + 35*s, cy - 50*s); ctx.lineTo(cx + 35*s, cy + 50*s); ctx.lineTo(cx + 70*s, cy + 60*s); ctx.lineTo(cx + 70*s, cy - 60*s); ctx.fill();
+            ctx.save(); ctx.translate(cx+55*s, cy); ctx.rotate(Math.PI/2); ctx.fillStyle="white"; ctx.fillText("EAST", 0,0); ctx.restore();
+        }
+
+        function drawMap() {
+            const w = mapCanvas.width; const h = mapCanvas.height;
+            const cx = w/2; const cy = h/2; const s = currentVenue.mapScale;
+            ctx.clearRect(0,0,w,h); ctx.fillStyle="#111"; ctx.fillRect(0,0,w,h);
+            currentVenue.drawMap(ctx, cx, cy, s);
+            
+            const mapCamX = cx + (camX*s); const mapCamY = cy + (camZ*s);
+            const lookMapX = cx + (lookTarget.x * s);
+            const lookMapY = cy + (lookTarget.z * s);
+            
+            ctx.beginPath(); ctx.moveTo(mapCamX, mapCamY); ctx.lineTo(lookMapX, lookMapY);
+            ctx.strokeStyle="rgba(255,255,255,0.3)"; ctx.setLineDash([2,2]); ctx.stroke(); ctx.setLineDash([]);
+            
+            ctx.beginPath(); ctx.arc(mapCamX, mapCamY, 5, 0, Math.PI*2);
+            ctx.fillStyle="#3b82f6"; ctx.fill(); ctx.stroke();
+            
+            if (targetGroup) {
+                ctx.beginPath(); ctx.arc(lookMapX, lookMapY, 3, 0, Math.PI*2);
+                ctx.fillStyle="#ffff00"; ctx.fill(); 
+            }
+        }
+
+        const slider = document.getElementById('focal-slider');
+        const focalDisplay = document.getElementById('focal-val');
+        const fovDisplay = document.getElementById('fov-val');
+        const distDisplay = document.getElementById('distance-val');
+        const heightDisplay = document.getElementById('height-val');
+        const venueSelect = document.getElementById('venue-select');
+
+        window.setFocalIndex = function(idx) {
+            slider.value = idx;
+            updateCamera();
+        };
+
+        function updateCamera() {
+            const t = parseFloat(slider.value);
+            const i = Math.floor(t);
+            const f = t - i;
+            let val;
+            if (i >= FOCAL_STOPS.length - 1) {
+                val = FOCAL_STOPS[FOCAL_STOPS.length - 1];
+            } else {
+                val = FOCAL_STOPS[i] + (FOCAL_STOPS[i+1] - FOCAL_STOPS[i]) * f;
+            }
+            currentFocalLength = Math.round(val);
+            focalDisplay.innerText = currentFocalLength;
+            
+            const diag = Math.sqrt(currentSensor.w**2 + currentSensor.h**2);
+            const dFOV = 2*Math.atan(diag/(2*currentFocalLength))*(180/Math.PI);
+            const vFOV = 2*Math.atan(currentSensor.h/(2*currentFocalLength))*(180/Math.PI);
+            
+            camera.fov = vFOV; camera.updateProjectionMatrix();
+            fovDisplay.innerText = dFOV.toFixed(1);
+
+            cameraHeight = currentVenue.getHeight(camX, camZ);
+            heightDisplay.innerText = cameraHeight.toFixed(1);
+            camera.position.set(camX, cameraHeight, camZ);
+            
+            camera.lookAt(lookTarget);
+            distDisplay.innerText = camera.position.distanceTo(lookTarget).toFixed(1);
+            
+            if(targetGroup) {
+                targetGroup.lookAt(camera.position.x, targetGroup.position.y, camera.position.z);
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        mapCanvas.addEventListener('mousedown', (e) => {
+            if (e.shiftKey) {
+                const rect = mapCanvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left; 
+                const mouseY = e.clientY - rect.top;
+                const w = mapCanvas.width; 
+                const h = mapCanvas.height; 
+                const s = currentVenue.mapScale;
+                
+                let nx = (mouseX - w/2) / s; 
+                let nz = (mouseY - h/2) / s;
+                
+                // Use robust raycasting for placement
+                createTargetFigure(nx, nz);
+                updateCamera();
+                drawMap();
+                return;
+            }
+            isDragging = true; 
+            updatePosFromMap(e);
+        });
+
+        let isDragging=false;
+        function updatePosFromMap(e) {
+            const rect = mapCanvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left; const mouseY = e.clientY - rect.top;
+            const w=mapCanvas.width; const h=mapCanvas.height; const s=currentVenue.mapScale;
+            let nx = (mouseX-w/2)/s; let nz = (mouseY-h/2)/s;
+            if(currentVenue.clamp) {
+                const c = currentVenue.clamp(nx, nz); nx=c.x; nz=c.z;
+            }
+            camX=nx; camZ=nz;
+            drawMap(); updateCamera();
+        }
+        
+        window.addEventListener('mousemove', (e)=>{if(isDragging)updatePosFromMap(e)});
+        window.addEventListener('mouseup', ()=>isDragging=false);
+        slider.addEventListener('input', updateCamera);
+        venueSelect.addEventListener('change', (e)=>{
+            currentVenue = VENUES[e.target.value];
+            camX=0; camZ=(currentVenue.name.includes("Asia"))?30:-50;
+            lookTarget.set(0,1.5,(currentVenue.name.includes("Asia"))?-45:0);
+            clearStadium(); currentVenue.build(); drawMap(); updateCamera();
+        });
+        window.addEventListener('resize', ()=>{
+            camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight); updateCamera();
+        });
+        window.setSensor = function(type) { currentSensor=SENSORS[type]; updateCamera(); };
+
+        currentVenue.build(); drawMap(); updateCamera();
+    </script>
+</body>
+</html>
