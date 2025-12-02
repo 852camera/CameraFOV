@@ -2,116 +2,107 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Stadium Lens Simulator (HK Edition)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: 'Segoe UI', sans-serif; }
-        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: default; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: default; touch-action: none; }
         
-        /* UI Overlay */
         .ui-layer { position: absolute; z-index: 10; pointer-events: none; }
         .interactive { pointer-events: auto; }
 
-        /* Range Slider Styling */
-        input[type=range] {
-            -webkit-appearance: none; width: 100%; background: transparent;
-        }
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; height: 20px; }
         input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%;
-            background: #3b82f6; cursor: pointer; margin-top: -8px; border: 2px solid white;
+            -webkit-appearance: none; height: 24px; width: 24px; border-radius: 50%;
+            background: #3b82f6; cursor: pointer; margin-top: -10px; border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
         }
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%; height: 4px; cursor: pointer; background: #4b5563; border-radius: 2px;
-        }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #4b5563; border-radius: 2px; }
 
-        /* Map Canvas */
         #map-canvas {
             background: rgba(0, 20, 0, 0.8);
             border: 2px solid #333;
             border-radius: 8px;
             cursor: crosshair;
             box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+            touch-action: none;
+            /* Ensure responsive sizing while maintaining aspect ratio */
+            width: 100%;
+            max-width: 220px;
+            aspect-ratio: 1/1;
         }
 
-        /* Select Dropdown */
         select {
             background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23007CB2%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
-            background-repeat: no-repeat;
-            background-position: right 0.7rem top 50%;
-            background-size: 0.65rem auto;
-            appearance: none;
+            background-repeat: no-repeat; background-position: right 0.7rem top 50%; background-size: 0.65rem auto; appearance: none;
         }
         
-        /* Clickable Marks */
-        .focal-mark { cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: background 0.2s; user-select: none; width: 30px; text-align: center; }
+        .focal-mark { cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: background 0.2s; user-select: none; width: 30px; text-align: center; }
         .focal-mark:hover { background: rgba(255,255,255,0.2); color: #3b82f6; }
+        @media (max-width: 640px) { .focal-mark { font-size: 10px; width: auto; padding: 2px; } }
     </style>
 </head>
 <body>
 
-    <!-- 3D Viewport -->
     <div id="canvas-container"></div>
 
-    <!-- HUD Overlay -->
-    <div class="ui-layer w-full h-full flex flex-col justify-between p-4">
+    <div class="ui-layer w-full h-full flex flex-col justify-between p-2 md:p-4">
         
-        <!-- Header -->
-        <div class="flex justify-between items-start">
-            <div class="bg-black/70 backdrop-blur-md p-4 rounded-lg border border-gray-700 max-w-sm pointer-events-auto">
-                <h1 class="text-xl font-bold text-blue-400 mb-1">Stadium Lens Sim</h1>
+        <div class="flex flex-col md:flex-row justify-between items-start gap-2 pointer-events-none">
+            <div class="bg-black/70 backdrop-blur-md p-3 rounded-lg border border-gray-700 w-full md:max-w-sm interactive shadow-lg">
+                <div class="flex justify-between items-center mb-2">
+                    <h1 class="text-lg font-bold text-blue-400 leading-none">Stadium Lens</h1>
+                    <span class="text-[10px] text-gray-400 bg-gray-800 px-1 rounded">HK EDITION</span>
+                </div>
                 <div class="mb-2">
-                    <label class="text-xs text-gray-400 block mb-1">SELECT VENUE</label>
-                    <select id="venue-select" class="w-full bg-gray-800 border border-gray-600 text-white text-sm rounded p-2 focus:ring-blue-500 focus:border-blue-500 block">
+                    <select id="venue-select" class="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2 focus:ring-blue-500 focus:border-blue-500 block">
                         <option value="hk_coliseum">Hong Kong Coliseum (Hung Hom)</option>
                         <option value="asia_world">AsiaWorld-Expo (Arena)</option>
                         <option value="kai_tak">Kai Tak Main Stadium</option>
                     </select>
                 </div>
-                <p class="text-xs text-gray-400">1. Drag Map to move camera.<br>2. <b>Shift+Click Map</b> to place Subject.</p>
+                <p class="text-[10px] text-gray-400 leading-tight">Drag Map to move.<br><b>Double-Tap Map</b> (or Shift+Click) to set Target.</p>
             </div>
             
-            <!-- Readouts -->
-            <div class="bg-black/70 backdrop-blur-md p-4 rounded-lg border border-gray-700 text-right w-48 pointer-events-auto">
-                <div class="text-xs text-gray-400 uppercase tracking-wider">Target Dist</div>
-                <div class="text-xl font-mono text-white mb-2"><span id="distance-val">0</span> m</div>
-                <div class="text-xs text-gray-400 uppercase tracking-wider">Angle of View</div>
-                <div class="text-xl font-mono text-white"><span id="fov-val">0</span>°</div>
-                <div class="text-[10px] text-gray-500">(Diagonal)</div>
-                <div class="text-xs text-gray-400 uppercase tracking-wider mt-2">Cam Height</div>
-                <div class="text-xl font-mono text-white"><span id="height-val">1.7</span> m</div>
+            <div class="bg-black/70 backdrop-blur-md p-3 rounded-lg border border-gray-700 interactive shadow-lg flex flex-row md:flex-col gap-4 md:gap-0 justify-between min-w-[200px]">
+                <div>
+                    <div class="text-[10px] text-gray-400 uppercase tracking-wider">Target Dist</div>
+                    <div class="text-lg font-mono text-white leading-tight"><span id="distance-val">0</span> m</div>
+                </div>
+                <div class="md:mt-2">
+                    <div class="text-[10px] text-gray-400 uppercase tracking-wider">FOV (Diag)</div>
+                    <div class="text-lg font-mono text-white leading-tight"><span id="fov-val">0</span>°</div>
+                </div>
+                <div class="md:mt-2">
+                    <div class="text-[10px] text-gray-400 uppercase tracking-wider">Cam Height</div>
+                    <div class="text-lg font-mono text-white leading-tight"><span id="height-val">1.7</span> m</div>
+                </div>
             </div>
         </div>
 
-        <!-- Bottom Controls -->
-        <div class="flex flex-col md:flex-row items-end md:items-end justify-between gap-4">
+        <div class="flex flex-col md:flex-row items-end justify-between gap-2 md:gap-4 mt-auto">
             
-            <!-- Map (Bottom Left) -->
-            <div class="interactive relative group">
-                <div class="absolute -top-8 left-0 text-sm font-bold text-white bg-black/50 px-2 rounded">Position Map (Shift+Click to set Target)</div>
+            <div class="interactive relative group order-2 md:order-1 self-start md:self-auto">
+                <div class="absolute -top-6 left-0 text-[10px] font-bold text-white bg-black/50 px-2 rounded backdrop-blur">Position Map (Shift+Click to set Target)</div>
+                <!-- Set explicit internal resolution, let CSS handle display size -->
                 <canvas id="map-canvas" width="220" height="220" title="Drag to move camera. Shift+Click to move target figure."></canvas>
             </div>
 
-            <!-- Lens Controls (Bottom Center/Right) -->
-            <div class="interactive bg-black/80 backdrop-blur-md p-6 rounded-xl border border-gray-700 w-full md:max-w-xl mb-4 md:mb-0 shadow-2xl">
-                
-                <!-- Sensor Select -->
-                <div class="flex justify-center gap-2 mb-6">
-                    <button onclick="setSensor('ff')" id="btn-ff" class="px-4 py-2 text-sm bg-blue-600 rounded hover:bg-blue-500 transition border border-blue-400 font-bold">Full Frame</button>
-                    <button onclick="setSensor('apsc')" id="btn-apsc" class="px-4 py-2 text-sm bg-gray-700 rounded hover:bg-gray-600 transition border border-gray-600">APS-C (1.5x)</button>
-                    <button onclick="setSensor('mft')" id="btn-mft" class="px-4 py-2 text-sm bg-gray-700 rounded hover:bg-gray-600 transition border border-gray-600">M4/3 (2.0x)</button>
+            <div class="interactive bg-black/80 backdrop-blur-md p-4 rounded-xl border border-gray-700 w-full md:max-w-xl shadow-2xl order-1 md:order-2">
+                <div class="flex justify-between gap-1 mb-4">
+                    <button onclick="setSensor('ff')" id="btn-ff" class="flex-1 py-1.5 text-xs bg-blue-600 rounded hover:bg-blue-500 transition border border-blue-400 font-bold">Full Frame</button>
+                    <button onclick="setSensor('apsc')" id="btn-apsc" class="flex-1 py-1.5 text-xs bg-gray-700 rounded hover:bg-gray-600 transition border border-gray-600">APS-C</button>
+                    <button onclick="setSensor('mft')" id="btn-mft" class="flex-1 py-1.5 text-xs bg-gray-700 rounded hover:bg-gray-600 transition border border-gray-600">M4/3</button>
                 </div>
 
-                <!-- Focal Length Slider -->
-                <div class="mb-2 flex justify-between items-end">
-                    <label class="text-sm font-bold text-gray-300">Focal Length</label>
-                    <span class="text-2xl font-bold text-blue-400"><span id="focal-val">14</span>mm</span>
+                <div class="mb-1 flex justify-between items-end">
+                    <label class="text-xs font-bold text-gray-300">Focal Length</label>
+                    <span class="text-xl font-bold text-blue-400"><span id="focal-val">14</span>mm</span>
                 </div>
-                <!-- Slider: 0 to 8 corresponds to the 9 stops below -->
-                <input type="range" id="focal-slider" min="0" max="8" step="0.05" value="0" class="w-full mb-2">
+                <input type="range" id="focal-slider" min="0" max="8" step="0.05" value="0" class="w-full mb-3 touch-pan-y">
                 
-                <!-- Clickable Reference Marks -->
-                <div class="flex justify-between text-[10px] text-gray-500 font-mono w-full px-1">
+                <div class="flex justify-between text-[10px] text-gray-500 font-mono w-full px-0.5 select-none">
                     <span class="focal-mark" onclick="setFocalIndex(0)">14</span>
                     <span class="focal-mark" onclick="setFocalIndex(1)">24</span>
                     <span class="focal-mark" onclick="setFocalIndex(2)">35</span>
@@ -141,6 +132,7 @@
 
         const FOCAL_STOPS = [14, 24, 35, 50, 85, 135, 200, 400, 600];
 
+        // --- Boundary Clamping ---
         function clampRect(x, z, xMax, zMax) {
             return { x: Math.max(-xMax, Math.min(xMax, x)), z: Math.max(-zMax, Math.min(zMax, z)) };
         }
@@ -158,10 +150,11 @@
             return { x: x/dist, z: z/dist };
         }
 
+        // Updated Map Scales to fit within 220px Canvas (radius 110px)
         const VENUES = {
             hk_coliseum: {
                 name: "HK Coliseum",
-                mapScale: 3.5, 
+                mapScale: 1.8, // Fit 55m radius: 110/55 ≈ 2.0 -> 1.8 for padding
                 build: buildHKColiseum,
                 drawMap: drawHKColiseumMap,
                 getHeight: getHKColiseumHeight,
@@ -169,7 +162,7 @@
             },
             asia_world: {
                 name: "AsiaWorld-Expo",
-                mapScale: 2.2,
+                mapScale: 1.5, // Fit ~70m long: 110/70 ≈ 1.57 -> 1.5
                 build: buildAsiaWorld,
                 drawMap: drawAsiaWorldMap,
                 getHeight: getAsiaWorldHeight,
@@ -177,7 +170,7 @@
             },
             kai_tak: {
                 name: "Kai Tak Main Stadium",
-                mapScale: 1.2, 
+                mapScale: 0.8, // Fit 125m long: 110/125 ≈ 0.88 -> 0.8
                 build: buildKaiTak,
                 drawMap: drawKaiTakMap,
                 getHeight: getKaiTakHeight,
@@ -191,7 +184,6 @@
         let cameraHeight = 1.7; 
         let camX = 0; let camZ = -50;
         
-        // Target Logic
         let lookTarget = new THREE.Vector3(0, 1.7, 0); 
         let targetGroup = null; 
 
@@ -251,11 +243,9 @@
             stadiumGroup = new THREE.Group();
             scene.add(stadiumGroup);
             
-            // Re-add target if exists
             if (targetGroup) {
                 stadiumGroup.add(targetGroup);
             } else {
-                // Init with no target
                 lookTarget.set(0, 1.7, 0);
             }
 
@@ -278,39 +268,29 @@
             }
             targetGroup = new THREE.Group();
             
-            // Bright Yellow Jersey
             const mat = new THREE.MeshStandardMaterial({color: 0xffff00, emissive: 0x222200});
             const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1), mat);
             body.position.y = 0.9; body.castShadow = true;
-            
             const head = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshStandardMaterial({color:0xffccaa}));
             head.position.y = 1.7;
-            
             targetGroup.add(body, head);
             
-            // Raycast to find exact ground height at (x, z)
+            // Raycast for ground height
             const rayOrigin = new THREE.Vector3(x, 100, z);
             const rayDir = new THREE.Vector3(0, -1, 0);
             raycaster.set(rayOrigin, rayDir);
             
-            // Intersect with stadium (excluding the target group itself if it were added)
             const intersects = raycaster.intersectObjects(stadiumGroup.children, true);
-            
             let groundY = 0;
-            // Find first intersection that IS NOT flagged as ignoreRaycast
             const validHit = intersects.find(hit => !hit.object.userData.ignoreRaycast);
-            
             if (validHit) {
                 groundY = validHit.point.y;
             } else {
-                // Fallback using analytical height
                 groundY = Math.max(0, currentVenue.getHeight(x, z) - 1.7);
             }
 
-            // Place on ground
             targetGroup.position.set(x, groundY, z);
             
-            // Arrow indicator
             const arrowGeo = new THREE.ConeGeometry(0.2, 0.5, 8);
             const arrowMat = new THREE.MeshBasicMaterial({color: 0xffff00});
             const arrow = new THREE.Mesh(arrowGeo, arrowMat);
@@ -353,10 +333,9 @@
                 const s = buildSteppedSection(18, numRows, rowDepth, rowHeight, startDist*1.35, 0, 0x555555);
                 s.rotation.y = (Math.PI/2)*i + Math.PI/4; stadiumGroup.add(s);
             }
-            // Ceiling Truss - Ignore for Raycast
             const truss = new THREE.Mesh(new THREE.BoxGeometry(70,1,70), new THREE.MeshBasicMaterial({color:0x111111, wireframe:true}));
             truss.position.y = 25; 
-            truss.userData = { ignoreRaycast: true }; // TAGGED
+            truss.userData = { ignoreRaycast: true };
             stadiumGroup.add(truss);
         }
 
@@ -377,10 +356,9 @@
             const ls = buildSteppedSection(90, 25, 0.8, 0.4, 22, 0, seatColor); ls.rotation.y=Math.PI/2; stadiumGroup.add(ls);
             const rear = buildSteppedSection(80, 25, 0.8, 0.4, 42, 0, seatColor); rear.rotation.y=Math.PI; stadiumGroup.add(rear);
             
-            // Ceiling Truss - Ignore
             const truss = new THREE.Mesh(new THREE.PlaneGeometry(75, 110, 10, 15), new THREE.MeshBasicMaterial({ color: 0x222222, wireframe: true }));
             truss.rotation.x = Math.PI/2; truss.position.y = 18; 
-            truss.userData = { ignoreRaycast: true }; // TAGGED
+            truss.userData = { ignoreRaycast: true };
             stadiumGroup.add(truss);
         }
 
@@ -418,14 +396,13 @@
             catwalk.position.set(0, 1, -zDist + 35);
             stadiumGroup.add(catwalk);
 
-            // Roof - Ignore for Raycast
             const trussGeo = new THREE.BoxGeometry(180, 4, 6);
             const trussMat = new THREE.MeshStandardMaterial({color: 0xffffff});
             const t1 = new THREE.Mesh(trussGeo, trussMat); t1.position.set(0, 65, -20); 
-            t1.userData = { ignoreRaycast: true }; // TAGGED
+            t1.userData = { ignoreRaycast: true };
             stadiumGroup.add(t1);
             const t2 = new THREE.Mesh(trussGeo, trussMat); t2.position.set(0, 65, 20); 
-            t2.userData = { ignoreRaycast: true }; // TAGGED
+            t2.userData = { ignoreRaycast: true };
             stadiumGroup.add(t2);
         }
 
@@ -550,39 +527,67 @@
             renderer.render(scene, camera);
         }
 
+        // Mouse click on map -> Calculate position using corrected logic
+        function getMousePos(canvas, evt) {
+            const rect = canvas.getBoundingClientRect();
+            // Scale displayed coordinates to internal canvas resolution
+            return {
+                x: (evt.clientX - rect.left) / rect.width * canvas.width,
+                y: (evt.clientY - rect.top) / rect.height * canvas.height
+            };
+        }
+
+        let lastTap = 0;
         mapCanvas.addEventListener('mousedown', (e) => {
-            if (e.shiftKey) {
-                const rect = mapCanvas.getBoundingClientRect();
-                const mouseX = e.clientX - rect.left; 
-                const mouseY = e.clientY - rect.top;
-                const w = mapCanvas.width; 
-                const h = mapCanvas.height; 
-                const s = currentVenue.mapScale;
-                
-                let nx = (mouseX - w/2) / s; 
-                let nz = (mouseY - h/2) / s;
-                
-                // Use robust raycasting for placement
+            const currentTime = new Date().getTime();
+            const tapLength = currentTime - lastTap;
+            let isDoubleTap = (tapLength < 300) && (tapLength > 0);
+            
+            const pos = getMousePos(mapCanvas, e);
+            const w = mapCanvas.width; const h = mapCanvas.height;
+            const s = currentVenue.mapScale;
+            const nx = (pos.x - w/2) / s; 
+            const nz = (pos.y - h/2) / s;
+
+            if (e.shiftKey || isDoubleTap) {
+                e.preventDefault(); 
                 createTargetFigure(nx, nz);
                 updateCamera();
                 drawMap();
+                lastTap = 0; 
                 return;
             }
+            lastTap = currentTime;
             isDragging = true; 
-            updatePosFromMap(e);
+            updatePosFromMapInternal(nx, nz);
+        });
+
+        // Also add standard dblclick event
+        mapCanvas.addEventListener('dblclick', (e) => {
+             const pos = getMousePos(mapCanvas, e);
+             const w = mapCanvas.width; const h = mapCanvas.height; const s = currentVenue.mapScale;
+             let nx = (pos.x - w/2) / s; 
+             let nz = (pos.y - h/2) / s;
+             createTargetFigure(nx, nz);
+             updateCamera();
+             drawMap();
         });
 
         let isDragging=false;
-        function updatePosFromMap(e) {
-            const rect = mapCanvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left; const mouseY = e.clientY - rect.top;
-            const w=mapCanvas.width; const h=mapCanvas.height; const s=currentVenue.mapScale;
-            let nx = (mouseX-w/2)/s; let nz = (mouseY-h/2)/s;
+        function updatePosFromMapInternal(nx, nz) {
             if(currentVenue.clamp) {
                 const c = currentVenue.clamp(nx, nz); nx=c.x; nz=c.z;
             }
             camX=nx; camZ=nz;
             drawMap(); updateCamera();
+        }
+
+        function updatePosFromMap(e) {
+            const pos = getMousePos(mapCanvas, e);
+            const w = mapCanvas.width; const h = mapCanvas.height; const s = currentVenue.mapScale;
+            let nx = (pos.x - w/2) / s; 
+            let nz = (pos.y - h/2) / s;
+            updatePosFromMapInternal(nx, nz);
         }
         
         window.addEventListener('mousemove', (e)=>{if(isDragging)updatePosFromMap(e)});
@@ -599,6 +604,22 @@
             renderer.setSize(window.innerWidth, window.innerHeight); updateCamera();
         });
         window.setSensor = function(type) { currentSensor=SENSORS[type]; updateCamera(); };
+        
+        // Initial setup for buttons styling
+        ['ff', 'apsc', 'mft'].forEach(t => {
+            document.getElementById(`btn-${t}`).addEventListener('click', function() {
+                ['ff', 'apsc', 'mft'].forEach(x => {
+                    const btn = document.getElementById(`btn-${x}`);
+                    if(x === t) {
+                        btn.classList.remove('bg-gray-700', 'border-gray-600');
+                        btn.classList.add('bg-blue-600', 'border-blue-400', 'font-bold');
+                    } else {
+                        btn.classList.add('bg-gray-700', 'border-gray-600');
+                        btn.classList.remove('bg-blue-600', 'border-blue-400', 'font-bold');
+                    }
+                });
+            });
+        });
 
         currentVenue.build(); drawMap(); updateCamera();
     </script>
