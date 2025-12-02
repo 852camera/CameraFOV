@@ -153,10 +153,11 @@
 
         // --- Configuration & Data ---
         
+        // SENSORS: Fixed 3:2 ratio to keep frame size static
         const SENSORS = {
             ff: { w: 36, h: 24, name: "Full Frame" },
-            apsc: { w: 23.6, h: 15.6, name: "APS-C" },
-            mft: { w: 17.3, h: 13, name: "Micro 4/3" }
+            apsc: { w: 24, h: 16, name: "APS-C (1.5x)" }, // Simulated as 1.5x crop of 36x24
+            mft: { w: 18, h: 12, name: "M4/3 (2.0x)" }   // Simulated as 2.0x crop of 36x24
         };
 
         const FOCAL_STOPS = [14, 24, 35, 50, 85, 135, 200, 400, 600, 800];
@@ -179,7 +180,7 @@
             return { x: x/dist, z: z/dist };
         }
 
-        // Updated Scales based on user feedback (Kai Tak 1.4x larger)
+        // Updated Scales based on user reference
         const VENUES = {
             hk_coliseum: {
                 name: "HK Coliseum",
@@ -199,13 +200,11 @@
             },
             kai_tak: {
                 name: "Kai Tak Main Stadium",
-                // Upscaled stadium -> Downscale map (zoom out) to fit
-                // Prev Scale 1.1 -> New Scale 0.8
                 mapScale: 0.8,
                 build: buildKaiTak,
                 drawMap: drawKaiTakMap,
                 getHeight: getKaiTakHeight,
-                clamp: (x, z) => clampEllipse(x, z, 115, 140) // Wider boundary
+                clamp: (x, z) => clampEllipse(x, z, 115, 140)
             }
         };
 
@@ -216,6 +215,7 @@
         let camX = 0; let camZ = -50;
         let lookTarget = new THREE.Vector3(0, 1.7, 0); 
         let targetGroup = null; 
+        let isMapCollapsed = false;
 
         // --- Three.js Init ---
         const container = document.getElementById('canvas-container');
@@ -262,7 +262,6 @@
         }
         
         function getKaiTakHeight(x, z) {
-            // Upscaled dimensions logic
             const xRad = 62; const zRad = 90;
             const val = (x*x)/(xRad*xRad) + (z*z)/(zRad*zRad);
             if (val < 1) return 1.7; 
@@ -370,7 +369,6 @@
                 const s = buildSteppedSection(20, numRows, rowDepth, rowHeight, startDist*1.35, 0, 0x555555);
                 s.rotation.y = (Math.PI/2)*i + Math.PI/4; stadiumGroup.add(s);
             }
-            
             const truss = new THREE.Mesh(new THREE.BoxGeometry(90, 1, 90), new THREE.MeshBasicMaterial({color:0x111111, wireframe:true}));
             truss.position.y = 23; 
             truss.userData = { ignoreRaycast: true };
@@ -505,7 +503,12 @@
         function drawMap() {
             const w = mapCanvas.width; const h = mapCanvas.height;
             const cx = w/2; const cy = h/2; const s = currentVenue.mapScale;
-            ctx.clearRect(0,0,w,h); ctx.fillStyle="#111"; ctx.fillRect(0,0,w,h);
+            ctx.clearRect(0,0,w,h); 
+            // Default BG is black, but Kai Tak has own BG
+            if(currentVenue.name !== "Kai Tak Main Stadium") {
+               ctx.fillStyle="#111"; ctx.fillRect(0,0,w,h);
+            }
+            
             currentVenue.drawMap(ctx, cx, cy, s);
             
             const mapCamX = cx + (camX*s); const mapCamY = cy + (camZ*s);
