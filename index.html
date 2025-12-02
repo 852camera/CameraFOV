@@ -9,6 +9,24 @@
         body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: 'Segoe UI', sans-serif; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: default; touch-action: none; }
         
+        /* Camera Frame Overlay */
+        #camera-frame {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+            z-index: 5; 
+            pointer-events: none;
+            display: none; 
+        }
+
+        /* Grid Lines */
+        .grid-line { position: absolute; background-color: rgba(255, 255, 255, 0.5); pointer-events: none; }
+        .grid-line-v { width: 1px; height: 100%; top: 0; }
+        .grid-line-h { height: 1px; width: 100%; left: 0; }
+
         .ui-layer { position: absolute; z-index: 10; pointer-events: none; }
         .interactive { pointer-events: auto; }
 
@@ -36,7 +54,6 @@
         .focal-mark:hover { background: rgba(255,255,255,0.2); color: #3b82f6; }
         @media (max-width: 640px) { .focal-mark { font-size: 10px; width: auto; padding: 2px; } }
 
-        /* Map Toggle Styles */
         .map-minimized #map-content { display: none; }
         .map-minimized { width: auto !important; }
     </style>
@@ -44,10 +61,16 @@
 <body>
 
     <div id="canvas-container"></div>
+    
+    <div id="camera-frame">
+        <div class="grid-line grid-line-v" style="left: 33.33%;"></div>
+        <div class="grid-line grid-line-v" style="left: 66.66%;"></div>
+        <div class="grid-line grid-line-h" style="top: 33.33%;"></div>
+        <div class="grid-line grid-line-h" style="top: 66.66%;"></div>
+    </div>
 
     <div class="ui-layer w-full h-full flex flex-col justify-between p-2 md:p-4 pointer-events-none">
         
-        <!-- Header -->
         <div class="flex flex-col md:flex-row justify-between items-start gap-2 pointer-events-none">
             <div class="bg-black/70 backdrop-blur-md p-3 rounded-lg border border-gray-700 w-full md:max-w-sm interactive shadow-lg">
                 <div class="flex justify-between items-center mb-2">
@@ -80,27 +103,18 @@
             </div>
         </div>
 
-        <!-- Bottom Controls Wrapper -->
         <div class="relative w-full mt-auto md:flex md:flex-row md:items-end md:justify-between md:gap-4">
             
-            <!-- Collapsible Map Container -->
-            <!-- Adjusted position: bottom-36 to sit just above the slider panel on mobile -->
             <div id="map-container" class="interactive relative group absolute bottom-36 left-0 md:static md:order-1 md:bottom-auto md:left-auto flex flex-col items-start transition-all duration-200">
-                
-                <!-- Map Header / Toggle -->
                 <div class="flex justify-between items-center bg-black/80 rounded-t px-2 py-1 backdrop-blur border-t border-l border-r border-gray-700 w-full md:w-[220px]">
                     <span class="text-[10px] font-bold text-white">Map</span>
                     <button id="map-toggle-btn" class="text-xs text-blue-400 font-bold px-2 hover:text-white" onclick="toggleMap()">[−]</button>
                 </div>
-                
-                <!-- Map Content -->
                 <div id="map-content" class="border-b border-l border-r border-gray-700 bg-black/80 backdrop-blur rounded-b">
-                    <!-- Smaller default size for mobile (150px), larger for desktop (220px) -->
                     <canvas id="map-canvas" width="220" height="220" class="w-[150px] h-[150px] md:w-[220px] md:h-[220px]" title="Drag to move camera. Shift+Click to move target figure."></canvas>
                 </div>
             </div>
 
-            <!-- Lens Controls -->
             <div class="interactive bg-black/90 backdrop-blur-md p-4 border-t border-gray-700 shadow-2xl 
                         absolute -bottom-2 -left-2 -right-2 w-[calc(100%+16px)] rounded-t-xl
                         md:bg-black/80 md:border md:rounded-xl md:static md:w-full md:max-w-xl md:order-2">
@@ -114,7 +128,7 @@
                     <label class="text-xs font-bold text-gray-300">Focal Length</label>
                     <span class="text-xl font-bold text-blue-400"><span id="focal-val">14</span>mm</span>
                 </div>
-                <input type="range" id="focal-slider" min="0" max="8" step="0.05" value="0" class="w-full mb-3 touch-pan-y">
+                <input type="range" id="focal-slider" min="0" max="9" step="0.05" value="0" class="w-full mb-3 touch-pan-y">
                 
                 <div class="flex justify-between text-[10px] text-gray-500 font-mono w-full px-0.5 select-none">
                     <span class="focal-mark" onclick="setFocalIndex(0)">14</span>
@@ -126,6 +140,7 @@
                     <span class="focal-mark" onclick="setFocalIndex(6)">200</span>
                     <span class="focal-mark" onclick="setFocalIndex(7)">400</span>
                     <span class="focal-mark" onclick="setFocalIndex(8)">600</span>
+                    <span class="focal-mark" onclick="setFocalIndex(9)">800</span>
                 </div>
             </div>
 
@@ -144,27 +159,7 @@
             mft: { w: 17.3, h: 13, name: "Micro 4/3" }
         };
 
-        const FOCAL_STOPS = [14, 24, 35, 50, 85, 135, 200, 400, 600];
-
-        // --- UI Logic ---
-        
-        // Map Toggle Logic
-        let isMapCollapsed = false;
-        window.toggleMap = function() {
-            const container = document.getElementById('map-container');
-            const btn = document.getElementById('map-toggle-btn');
-            isMapCollapsed = !isMapCollapsed;
-            
-            if (isMapCollapsed) {
-                container.classList.add('map-minimized');
-                btn.innerText = "[+]";
-            } else {
-                container.classList.remove('map-minimized');
-                btn.innerText = "[−]";
-                // Re-render map when expanded
-                drawMap();
-            }
-        };
+        const FOCAL_STOPS = [14, 24, 35, 50, 85, 135, 200, 400, 600, 800];
 
         // --- Boundary Clamping ---
         function clampRect(x, z, xMax, zMax) {
@@ -184,15 +179,15 @@
             return { x: x/dist, z: z/dist };
         }
 
-        // Updated Map Scales to fit within 220px Canvas (radius 110px)
+        // Updated Scales based on user feedback (Kai Tak 1.4x larger)
         const VENUES = {
             hk_coliseum: {
                 name: "HK Coliseum",
-                mapScale: 1.8, 
+                mapScale: 2.2,
                 build: buildHKColiseum,
                 drawMap: drawHKColiseumMap,
                 getHeight: getHKColiseumHeight,
-                clamp: (x, z) => clampRadius(x, z, 55)
+                clamp: (x, z) => clampRadius(x, z, 48)
             },
             asia_world: {
                 name: "AsiaWorld-Expo",
@@ -200,15 +195,17 @@
                 build: buildAsiaWorld,
                 drawMap: drawAsiaWorldMap,
                 getHeight: getAsiaWorldHeight,
-                clamp: (x, z) => clampRect(x, z, 38, 55)
+                clamp: (x, z) => clampRect(x, z, 43, 63)
             },
             kai_tak: {
                 name: "Kai Tak Main Stadium",
-                mapScale: 0.8, 
+                // Upscaled stadium -> Downscale map (zoom out) to fit
+                // Prev Scale 1.1 -> New Scale 0.8
+                mapScale: 0.8,
                 build: buildKaiTak,
                 drawMap: drawKaiTakMap,
                 getHeight: getKaiTakHeight,
-                clamp: (x, z) => clampEllipse(x, z, 95, 125) 
+                clamp: (x, z) => clampEllipse(x, z, 115, 140) // Wider boundary
             }
         };
 
@@ -217,7 +214,6 @@
         let currentFocalLength = 14; 
         let cameraHeight = 1.7; 
         let camX = 0; let camZ = -50;
-        
         let lookTarget = new THREE.Vector3(0, 1.7, 0); 
         let targetGroup = null; 
 
@@ -251,24 +247,27 @@
         // --- Height Logic ---
         function getHKColiseumHeight(x, z) {
             const dist = Math.sqrt(x*x + z*z);
-            if (dist < 18) return 1.7;
-            return 1.7 + (dist - 18) * 0.6; 
+            if (dist < 22) return 1.7; 
+            const t = (dist - 22) / (45 - 22);
+            return 1.7 + (Math.max(0, t) * 40);
         }
+        
         function getAsiaWorldHeight(x, z) {
-            const w = 20; const l = 40; 
-            if (Math.abs(x) < w && z < l && z > -50) return 1.7;
+            const w = 43; const l = 63; 
+            if (Math.abs(x) < 30 && z < 50 && z > -50) return 1.7;
             let dist = 0;
-            if (Math.abs(x) >= w) dist = Math.abs(x) - w;
-            if (z >= l) dist = Math.max(dist, z - l);
-            return 1.7 + (dist * 0.6);
+            if (Math.abs(x) >= 30) dist = Math.abs(x) - 30;
+            if (z >= 50) dist = Math.max(dist, z - 50);
+            return 1.7 + (dist * 0.8);
         }
+        
         function getKaiTakHeight(x, z) {
-            const xRad = 45; const zRad = 65;
+            // Upscaled dimensions logic
+            const xRad = 62; const zRad = 90;
             const val = (x*x)/(xRad*xRad) + (z*z)/(zRad*zRad);
             if (val < 1) return 1.7; 
             const distFactor = Math.sqrt(val) - 1; 
-            if (z > 40 && Math.abs(x) < 40) return 1.7 + distFactor * 60; 
-            return 1.7 + distFactor * 40; 
+            return 1.7 + distFactor * 60; 
         }
 
         // --- Geometry Builders ---
@@ -351,90 +350,100 @@
         }
 
         function buildHKColiseum() {
-            const floor = new THREE.Mesh(new THREE.PlaneGeometry(45, 45), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x222222 }));
             floor.rotation.x = -Math.PI/2; stadiumGroup.add(floor);
             const stage = new THREE.Mesh(new THREE.BoxGeometry(14, 1.5, 14), new THREE.MeshStandardMaterial({ color: 0x111111 }));
             stage.position.y = 0.75; stadiumGroup.add(stage);
             
-            const numRows = 35; const rowDepth = 0.9; const rowHeight = 0.55; const startDist = 18; const bankW = 30;
+            const numRows = 60; 
+            const rowDepth = 0.8; 
+            const rowHeight = 0.65; 
+            const startDist = 22; 
+            const bankW = 35;
+
             const configs = [{c:0xdd2222, r:0}, {c:0x2244dd, r:Math.PI/2}, {c:0xdddd22, r:Math.PI}, {c:0x22aa22, r:-Math.PI/2}];
             configs.forEach(cf => {
                 const s = buildSteppedSection(bankW, numRows, rowDepth, rowHeight, startDist, 0, cf.c);
                 s.rotation.y = cf.r; stadiumGroup.add(s);
             });
             for(let i=0; i<4; i++){
-                const s = buildSteppedSection(18, numRows, rowDepth, rowHeight, startDist*1.35, 0, 0x555555);
+                const s = buildSteppedSection(20, numRows, rowDepth, rowHeight, startDist*1.35, 0, 0x555555);
                 s.rotation.y = (Math.PI/2)*i + Math.PI/4; stadiumGroup.add(s);
             }
-            const truss = new THREE.Mesh(new THREE.BoxGeometry(70,1,70), new THREE.MeshBasicMaterial({color:0x111111, wireframe:true}));
-            truss.position.y = 25; 
+            
+            const truss = new THREE.Mesh(new THREE.BoxGeometry(90, 1, 90), new THREE.MeshBasicMaterial({color:0x111111, wireframe:true}));
+            truss.position.y = 23; 
             truss.userData = { ignoreRaycast: true };
             stadiumGroup.add(truss);
         }
 
         function buildAsiaWorld() {
-            const floor = new THREE.Mesh(new THREE.PlaneGeometry(75, 110), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(86, 127), new THREE.MeshStandardMaterial({ color: 0x333333 }));
             floor.rotation.x = -Math.PI/2; stadiumGroup.add(floor);
+            
             const stage = new THREE.Mesh(new THREE.BoxGeometry(24, 1.5, 16), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-            stage.position.set(0, 0.75, -45); stadiumGroup.add(stage);
+            stage.position.set(0, 0.75, -50); stadiumGroup.add(stage);
 
             const seatColor = 0x6a0dad; const blockMat = new THREE.MeshStandardMaterial({ color: seatColor });
             function createFloorBlock(x, z) {
                 const b = new THREE.Mesh(new THREE.BoxGeometry(16, 0.2, 20), blockMat);
                 b.position.set(x, 0.1, z); stadiumGroup.add(b);
             }
-            [[-10,-20],[10,-20],[-10,5],[10,5],[-10,30],[10,30]].forEach(p=>createFloorBlock(p[0],p[1]));
+            [[-15,-20],[15,-20],[-15,5],[15,5],[-15,30],[15,30]].forEach(p=>createFloorBlock(p[0],p[1]));
 
-            const rs = buildSteppedSection(90, 25, 0.8, 0.4, 22, 0, seatColor); rs.rotation.y=-Math.PI/2; stadiumGroup.add(rs);
-            const ls = buildSteppedSection(90, 25, 0.8, 0.4, 22, 0, seatColor); ls.rotation.y=Math.PI/2; stadiumGroup.add(ls);
-            const rear = buildSteppedSection(80, 25, 0.8, 0.4, 42, 0, seatColor); rear.rotation.y=Math.PI; stadiumGroup.add(rear);
+            const rs = buildSteppedSection(100, 30, 0.8, 0.4, 30, 0, seatColor); rs.rotation.y=-Math.PI/2; stadiumGroup.add(rs);
+            const ls = buildSteppedSection(100, 30, 0.8, 0.4, 30, 0, seatColor); ls.rotation.y=Math.PI/2; stadiumGroup.add(ls);
+            const rear = buildSteppedSection(80, 30, 0.8, 0.4, 50, 0, seatColor); rear.rotation.y=Math.PI; stadiumGroup.add(rear);
             
-            const truss = new THREE.Mesh(new THREE.PlaneGeometry(75, 110, 10, 15), new THREE.MeshBasicMaterial({ color: 0x222222, wireframe: true }));
-            truss.rotation.x = Math.PI/2; truss.position.y = 18; 
+            const truss = new THREE.Mesh(new THREE.PlaneGeometry(86, 127, 10, 15), new THREE.MeshBasicMaterial({ color: 0x222222, wireframe: true }));
+            truss.rotation.x = Math.PI/2; truss.position.y = 19; 
             truss.userData = { ignoreRaycast: true };
             stadiumGroup.add(truss);
         }
 
         function buildKaiTak() {
-            const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 130), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+            // Upscaled dimensions (1.4x factor)
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(120, 160), new THREE.MeshStandardMaterial({ color: 0x333333 }));
             floor.rotation.x = -Math.PI/2; stadiumGroup.add(floor);
 
-            const baseGeo = new THREE.PlaneGeometry(130, 160);
+            const baseGeo = new THREE.PlaneGeometry(180, 220);
             const baseMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
             const base = new THREE.Mesh(baseGeo, baseMat);
             base.rotation.x = -Math.PI/2; base.position.y = -0.1;
             stadiumGroup.add(base);
 
             const cPurple = 0x6a0dad; const cRed = 0xdd2222; 
-            const xDist = 45; const zDist = 65;
+            // New wider distances
+            const xDist = 62; 
+            const zDist = 90;
 
-            const sStand = buildSteppedSection(90, 45, 0.8, 0.55, zDist, 0, cPurple);
+            const sStand = buildSteppedSection(120, 60, 0.8, 0.55, zDist, 0, cPurple);
             sStand.rotation.y = Math.PI; stadiumGroup.add(sStand);
 
-            const wLower = buildSteppedSection(130, 18, 0.8, 0.4, xDist, 0, cPurple);
+            const wLower = buildSteppedSection(170, 20, 0.8, 0.4, xDist, 0, cPurple);
             wLower.rotation.y = -Math.PI/2; stadiumGroup.add(wLower);
-            const wUpper = buildSteppedSection(130, 22, 0.8, 0.6, xDist + (18*0.8)+3, (18*0.4)+3, cRed);
+            const wUpper = buildSteppedSection(170, 35, 0.8, 0.6, xDist + (20*0.8)+3, (20*0.4)+3, cRed);
             wUpper.rotation.y = -Math.PI/2; stadiumGroup.add(wUpper);
 
-            const eLower = buildSteppedSection(130, 18, 0.8, 0.4, xDist, 0, cPurple);
+            const eLower = buildSteppedSection(170, 20, 0.8, 0.4, xDist, 0, cPurple);
             eLower.rotation.y = Math.PI/2; stadiumGroup.add(eLower);
-            const eUpper = buildSteppedSection(130, 22, 0.8, 0.6, xDist + (18*0.8)+3, (18*0.4)+3, cRed);
+            const eUpper = buildSteppedSection(170, 35, 0.8, 0.6, xDist + (20*0.8)+3, (20*0.4)+3, cRed);
             eUpper.rotation.y = Math.PI/2; stadiumGroup.add(eUpper);
 
             const stageMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-            const stage = new THREE.Mesh(new THREE.BoxGeometry(40, 2, 20), stageMat);
+            const stage = new THREE.Mesh(new THREE.BoxGeometry(50, 2, 25), stageMat);
             stage.position.set(0, 1, -zDist + 10);
             stadiumGroup.add(stage);
-            const catwalk = new THREE.Mesh(new THREE.BoxGeometry(8, 2, 30), stageMat);
-            catwalk.position.set(0, 1, -zDist + 35);
+            const catwalk = new THREE.Mesh(new THREE.BoxGeometry(10, 2, 40), stageMat);
+            catwalk.position.set(0, 1, -zDist + 40);
             stadiumGroup.add(catwalk);
 
-            const trussGeo = new THREE.BoxGeometry(180, 4, 6);
+            const trussGeo = new THREE.BoxGeometry(220, 6, 8);
             const trussMat = new THREE.MeshStandardMaterial({color: 0xffffff});
-            const t1 = new THREE.Mesh(trussGeo, trussMat); t1.position.set(0, 65, -20); 
+            const t1 = new THREE.Mesh(trussGeo, trussMat); t1.position.set(0, 80, -25); 
             t1.userData = { ignoreRaycast: true };
             stadiumGroup.add(t1);
-            const t2 = new THREE.Mesh(trussGeo, trussMat); t2.position.set(0, 65, 20); 
+            const t2 = new THREE.Mesh(trussGeo, trussMat); t2.position.set(0, 80, 25); 
             t2.userData = { ignoreRaycast: true };
             stadiumGroup.add(t2);
         }
@@ -451,7 +460,7 @@
                 ctx.lineTo(25*s, -(dist+20)*s); ctx.lineTo(-25*s, -(dist+20)*s);
                 ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.restore();
             }
-            const d = 14;
+            const d = 11; 
             drawBank("#dd2222", 0, d); drawBank("#dddd22", Math.PI, d);
             drawBank("#2244dd", Math.PI/2, d); drawBank("#22aa22", -Math.PI/2, d);
             function drawCorner(angle) {
@@ -468,28 +477,29 @@
             ctx.fillStyle = "#111"; ctx.fillRect(cx - 12*s, cy - 45*s, 24*s, 8*s);
             ctx.fillStyle = "white"; ctx.font="9px sans-serif"; ctx.textAlign="center"; ctx.fillText("STAGE", cx, cy - 40*s);
             const bw = 16*s; const bl = 20*s; ctx.fillStyle = blockColor;
-            [[-10,-20],[10,-20],[-10,5],[10,5],[-10,30],[10,30]].forEach(p => {
+            [[-15,-20],[15,-20],[-15,5],[15,5],[-15,30],[15,30]].forEach(p => {
                 let x = (p[0]<0)?cx-bw-2*s : cx+2*s; ctx.fillRect(x, cy+p[1]*s, bw, bl);
             });
             ctx.fillStyle = seatColor;
-            ctx.fillRect(cx - 38*s, cy - 40*s, 14*s, 90*s);
-            ctx.fillRect(cx + 24*s, cy - 40*s, 14*s, 90*s);
-            ctx.fillRect(cx - 38*s, cy + 45*s, 76*s, 14*s);
+            ctx.fillRect(cx - 43*s, cy - 40*s, 13*s, 90*s);
+            ctx.fillRect(cx + 30*s, cy - 40*s, 13*s, 90*s);
+            ctx.fillRect(cx - 43*s, cy + 45*s, 86*s, 13*s);
         }
 
         function drawKaiTakMap(ctx, cx, cy, s) {
-            ctx.fillStyle = "#333"; ctx.fillRect(cx - 35*s, cy - 50*s, 70*s, 100*s);
-            ctx.fillStyle = "#8a2be2"; ctx.beginPath(); ctx.moveTo(cx - 35*s, cy + 50*s);
-            ctx.lineTo(cx + 35*s, cy + 50*s); ctx.lineTo(cx + 50*s, cy + 90*s); ctx.lineTo(cx - 50*s, cy + 90*s); ctx.fill();
-            ctx.fillStyle = "white"; ctx.font="10px sans-serif"; ctx.textAlign="center"; ctx.fillText("SOUTH", cx, cy + 70*s);
+            // Updated scaled drawing
+            ctx.fillStyle = "#333"; ctx.fillRect(cx - 45*s, cy - 65*s, 90*s, 130*s);
+            ctx.fillStyle = "#8a2be2"; ctx.beginPath(); ctx.moveTo(cx - 45*s, cy + 65*s);
+            ctx.lineTo(cx + 45*s, cy + 65*s); ctx.lineTo(cx + 60*s, cy + 110*s); ctx.lineTo(cx - 60*s, cy + 110*s); ctx.fill();
+            ctx.fillStyle = "white"; ctx.font="10px sans-serif"; ctx.textAlign="center"; ctx.fillText("SOUTH", cx, cy + 85*s);
             ctx.fillStyle = "#000";
-            ctx.fillRect(cx - 20*s, cy - 65*s, 40*s, 10*s);
-            ctx.fillRect(cx - 4*s, cy - 55*s, 8*s, 20*s);
-            ctx.fillStyle = "white"; ctx.fillText("STAGE", cx, cy - 60*s);
-            ctx.fillStyle = "#2244dd"; ctx.beginPath(); ctx.moveTo(cx - 35*s, cy - 50*s); ctx.lineTo(cx - 35*s, cy + 50*s); ctx.lineTo(cx - 70*s, cy + 60*s); ctx.lineTo(cx - 70*s, cy - 60*s); ctx.fill();
-            ctx.save(); ctx.translate(cx-55*s, cy); ctx.rotate(-Math.PI/2); ctx.fillStyle="white"; ctx.fillText("WEST", 0,0); ctx.restore();
-            ctx.fillStyle = "#dd4422"; ctx.beginPath(); ctx.moveTo(cx + 35*s, cy - 50*s); ctx.lineTo(cx + 35*s, cy + 50*s); ctx.lineTo(cx + 70*s, cy + 60*s); ctx.lineTo(cx + 70*s, cy - 60*s); ctx.fill();
-            ctx.save(); ctx.translate(cx+55*s, cy); ctx.rotate(Math.PI/2); ctx.fillStyle="white"; ctx.fillText("EAST", 0,0); ctx.restore();
+            ctx.fillRect(cx - 25*s, cy - 80*s, 50*s, 12*s);
+            ctx.fillRect(cx - 5*s, cy - 68*s, 10*s, 25*s);
+            ctx.fillStyle = "white"; ctx.fillText("STAGE", cx, cy - 75*s);
+            ctx.fillStyle = "#2244dd"; ctx.beginPath(); ctx.moveTo(cx - 45*s, cy - 65*s); ctx.lineTo(cx - 45*s, cy + 65*s); ctx.lineTo(cx - 90*s, cy + 80*s); ctx.lineTo(cx - 90*s, cy - 80*s); ctx.fill();
+            ctx.save(); ctx.translate(cx-70*s, cy); ctx.rotate(-Math.PI/2); ctx.fillStyle="white"; ctx.fillText("WEST", 0,0); ctx.restore();
+            ctx.fillStyle = "#dd4422"; ctx.beginPath(); ctx.moveTo(cx + 45*s, cy - 65*s); ctx.lineTo(cx + 45*s, cy + 65*s); ctx.lineTo(cx + 90*s, cy + 80*s); ctx.lineTo(cx + 90*s, cy - 80*s); ctx.fill();
+            ctx.save(); ctx.translate(cx+70*s, cy); ctx.rotate(Math.PI/2); ctx.fillStyle="white"; ctx.fillText("EAST", 0,0); ctx.restore();
         }
 
         function drawMap() {
@@ -520,6 +530,7 @@
         const distDisplay = document.getElementById('distance-val');
         const heightDisplay = document.getElementById('height-val');
         const venueSelect = document.getElementById('venue-select');
+        const cameraFrame = document.getElementById('camera-frame');
 
         window.setFocalIndex = function(idx) {
             slider.value = idx;
@@ -560,10 +571,28 @@
             renderer.render(scene, camera);
         }
 
-        // Mouse click on map -> Calculate position using corrected logic
+        // Calculates and updates the camera frame overlay
+        function updateFrame() {
+            const screenW = window.innerWidth;
+            const screenH = window.innerHeight;
+            
+            // For vertical orientation, we swap sensor width and height
+            const sensorW_eff = currentSensor.h;
+            const sensorH_eff = currentSensor.w;
+
+            // Calculate scale factor to fit within the screen
+            const scale = Math.min(screenW / sensorW_eff, screenH / sensorH_eff);
+
+            const frameW = sensorW_eff * scale;
+            const frameH = sensorH_eff * scale;
+
+            cameraFrame.style.width = `${frameW}px`;
+            cameraFrame.style.height = `${frameH}px`;
+            cameraFrame.style.display = 'block';
+        }
+
         function getMousePos(canvas, evt) {
             const rect = canvas.getBoundingClientRect();
-            // Scale displayed coordinates to internal canvas resolution
             return {
                 x: (evt.clientX - rect.left) / rect.width * canvas.width,
                 y: (evt.clientY - rect.top) / rect.height * canvas.height
@@ -595,7 +624,6 @@
             updatePosFromMapInternal(nx, nz);
         });
 
-        // Also add standard dblclick event
         mapCanvas.addEventListener('dblclick', (e) => {
              const pos = getMousePos(mapCanvas, e);
              const w = mapCanvas.width; const h = mapCanvas.height; const s = currentVenue.mapScale;
@@ -634,11 +662,16 @@
         });
         window.addEventListener('resize', ()=>{
             camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight); updateCamera();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            updateCamera();
+            updateFrame(); // Update frame on resize
         });
-        window.setSensor = function(type) { currentSensor=SENSORS[type]; updateCamera(); };
+        window.setSensor = function(type) {
+            currentSensor=SENSORS[type];
+            updateCamera();
+            updateFrame(); // Update frame on sensor change
+        };
         
-        // Initial setup for buttons styling
         ['ff', 'apsc', 'mft'].forEach(t => {
             document.getElementById(`btn-${t}`).addEventListener('click', function() {
                 ['ff', 'apsc', 'mft'].forEach(x => {
@@ -654,7 +687,22 @@
             });
         });
 
-        currentVenue.build(); drawMap(); updateCamera();
+        // Initialize Map Toggle
+        window.toggleMap = function() {
+            const container = document.getElementById('map-container');
+            const btn = document.getElementById('map-toggle-btn');
+            isMapCollapsed = !isMapCollapsed;
+            if (isMapCollapsed) {
+                container.classList.add('map-minimized');
+                btn.innerText = "[+]";
+            } else {
+                container.classList.remove('map-minimized');
+                btn.innerText = "[−]";
+                drawMap();
+            }
+        };
+
+        currentVenue.build(); drawMap(); updateCamera(); updateFrame(); // Initial frame update
     </script>
 </body>
 </html>
