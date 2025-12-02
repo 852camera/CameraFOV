@@ -22,15 +22,9 @@
 
         #map-canvas {
             background: rgba(0, 20, 0, 0.8);
-            border: 2px solid #333;
-            border-radius: 8px;
             cursor: crosshair;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
             touch-action: none;
-            /* Ensure responsive sizing while maintaining aspect ratio */
-            width: 100%;
-            max-width: 220px;
-            aspect-ratio: 1/1;
+            display: block;
         }
 
         select {
@@ -41,6 +35,10 @@
         .focal-mark { cursor: pointer; padding: 4px 6px; border-radius: 4px; transition: background 0.2s; user-select: none; width: 30px; text-align: center; }
         .focal-mark:hover { background: rgba(255,255,255,0.2); color: #3b82f6; }
         @media (max-width: 640px) { .focal-mark { font-size: 10px; width: auto; padding: 2px; } }
+
+        /* Map Toggle Styles */
+        .map-minimized #map-content { display: none; }
+        .map-minimized { width: auto !important; }
     </style>
 </head>
 <body>
@@ -49,6 +47,7 @@
 
     <div class="ui-layer w-full h-full flex flex-col justify-between p-2 md:p-4 pointer-events-none">
         
+        <!-- Header -->
         <div class="flex flex-col md:flex-row justify-between items-start gap-2 pointer-events-none">
             <div class="bg-black/70 backdrop-blur-md p-3 rounded-lg border border-gray-700 w-full md:max-w-sm interactive shadow-lg">
                 <div class="flex justify-between items-center mb-2">
@@ -82,16 +81,26 @@
         </div>
 
         <!-- Bottom Controls Wrapper -->
-        <!-- On mobile, utilize absolute positioning to clear center screen -->
         <div class="relative w-full mt-auto md:flex md:flex-row md:items-end md:justify-between md:gap-4">
             
-            <!-- Map: Floats above slider on mobile, Static left on desktop -->
-            <div class="interactive relative group absolute bottom-40 left-0 md:static md:order-1 md:bottom-auto md:left-auto">
-                <div class="absolute -top-6 left-0 text-[10px] font-bold text-white bg-black/50 px-2 rounded backdrop-blur">Position Map (Shift+Click to set Target)</div>
-                <canvas id="map-canvas" width="220" height="220" title="Drag to move camera. Shift+Click to move target figure."></canvas>
+            <!-- Collapsible Map Container -->
+            <!-- Adjusted position: bottom-36 to sit just above the slider panel on mobile -->
+            <div id="map-container" class="interactive relative group absolute bottom-36 left-0 md:static md:order-1 md:bottom-auto md:left-auto flex flex-col items-start transition-all duration-200">
+                
+                <!-- Map Header / Toggle -->
+                <div class="flex justify-between items-center bg-black/80 rounded-t px-2 py-1 backdrop-blur border-t border-l border-r border-gray-700 w-full md:w-[220px]">
+                    <span class="text-[10px] font-bold text-white">Map</span>
+                    <button id="map-toggle-btn" class="text-xs text-blue-400 font-bold px-2 hover:text-white" onclick="toggleMap()">[−]</button>
+                </div>
+                
+                <!-- Map Content -->
+                <div id="map-content" class="border-b border-l border-r border-gray-700 bg-black/80 backdrop-blur rounded-b">
+                    <!-- Smaller default size for mobile (150px), larger for desktop (220px) -->
+                    <canvas id="map-canvas" width="220" height="220" class="w-[150px] h-[150px] md:w-[220px] md:h-[220px]" title="Drag to move camera. Shift+Click to move target figure."></canvas>
+                </div>
             </div>
 
-            <!-- Lens Controls: Fixed to bottom on mobile, Static right on desktop -->
+            <!-- Lens Controls -->
             <div class="interactive bg-black/90 backdrop-blur-md p-4 border-t border-gray-700 shadow-2xl 
                         absolute -bottom-2 -left-2 -right-2 w-[calc(100%+16px)] rounded-t-xl
                         md:bg-black/80 md:border md:rounded-xl md:static md:w-full md:max-w-xl md:order-2">
@@ -137,6 +146,26 @@
 
         const FOCAL_STOPS = [14, 24, 35, 50, 85, 135, 200, 400, 600];
 
+        // --- UI Logic ---
+        
+        // Map Toggle Logic
+        let isMapCollapsed = false;
+        window.toggleMap = function() {
+            const container = document.getElementById('map-container');
+            const btn = document.getElementById('map-toggle-btn');
+            isMapCollapsed = !isMapCollapsed;
+            
+            if (isMapCollapsed) {
+                container.classList.add('map-minimized');
+                btn.innerText = "[+]";
+            } else {
+                container.classList.remove('map-minimized');
+                btn.innerText = "[−]";
+                // Re-render map when expanded
+                drawMap();
+            }
+        };
+
         // --- Boundary Clamping ---
         function clampRect(x, z, xMax, zMax) {
             return { x: Math.max(-xMax, Math.min(xMax, x)), z: Math.max(-zMax, Math.min(zMax, z)) };
@@ -159,7 +188,7 @@
         const VENUES = {
             hk_coliseum: {
                 name: "HK Coliseum",
-                mapScale: 1.8, // Fit 55m radius: 110/55 ≈ 2.0 -> 1.8 for padding
+                mapScale: 1.8, 
                 build: buildHKColiseum,
                 drawMap: drawHKColiseumMap,
                 getHeight: getHKColiseumHeight,
@@ -167,7 +196,7 @@
             },
             asia_world: {
                 name: "AsiaWorld-Expo",
-                mapScale: 1.5, // Fit ~70m long: 110/70 ≈ 1.57 -> 1.5
+                mapScale: 1.5,
                 build: buildAsiaWorld,
                 drawMap: drawAsiaWorldMap,
                 getHeight: getAsiaWorldHeight,
@@ -175,7 +204,7 @@
             },
             kai_tak: {
                 name: "Kai Tak Main Stadium",
-                mapScale: 0.8, // Fit 125m long: 110/125 ≈ 0.88 -> 0.8
+                mapScale: 0.8, 
                 build: buildKaiTak,
                 drawMap: drawKaiTakMap,
                 getHeight: getKaiTakHeight,
@@ -280,7 +309,6 @@
             head.position.y = 1.7;
             targetGroup.add(body, head);
             
-            // Raycast for ground height
             const rayOrigin = new THREE.Vector3(x, 100, z);
             const rayDir = new THREE.Vector3(0, -1, 0);
             raycaster.set(rayOrigin, rayDir);
